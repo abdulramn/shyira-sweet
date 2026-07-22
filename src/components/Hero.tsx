@@ -32,8 +32,8 @@ export default function Hero() {
         </p>
 
         <h1 className="font-display text-3xl font-bold leading-tight text-cream sm:text-5xl">
-          Handmade from our home
-          <br className="hidden sm:block" /> to your table
+          Authentic Syrian Sweets,
+          <br className="hidden sm:block" /> Made With Love
         </h1>
 
         <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-cream/85 sm:text-lg">
