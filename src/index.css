@@ -5,12 +5,13 @@
    Warm Middle Eastern dessert palette:
    deep green (from logo), gold, deep maroon, cream, warm brown
    ========================================================= */
+
 @theme {
   --font-display: "Playfair Display", "Amiri", Georgia, serif;
   --font-arabic: "Amiri", "Playfair Display", serif;
   --font-body: "Nunito Sans", ui-sans-serif, system-ui, sans-serif;
 
-  /* Updated brand colors from logo */
+  /* Brand colors */
   --color-green-deep: #285c50;
   --color-green-soft: #3a7667;
   --color-gold: #d69b28;
@@ -23,78 +24,312 @@
   --color-brown-soft: #8a6141;
 }
 
+/* =========================================================
+   GLOBAL
+   ========================================================= */
+
 html {
   scroll-behavior: smooth;
+  overflow-x: hidden;
 }
 
 body {
+  margin: 0;
+  min-width: 320px;
+  overflow-x: hidden;
   font-family: var(--font-body);
   background-color: var(--color-cream);
   color: var(--color-brown);
   -webkit-font-smoothing: antialiased;
 }
 
-/* Ornamental scrolling divider pattern reminiscent of arabesque tilework */
+/* =========================================================
+   ORNAMENTAL PATTERN
+   ========================================================= */
+
 .ss-pattern {
   background-color: transparent;
+
   background-image:
-    radial-gradient(circle at 50% 0, transparent 8px, var(--color-gold) 9px, transparent 10px),
-    radial-gradient(circle at 0 50%, transparent 8px, var(--color-gold) 9px, transparent 10px);
+    radial-gradient(
+      circle at 50% 0,
+      transparent 8px,
+      var(--color-gold) 9px,
+      transparent 10px
+    ),
+    radial-gradient(
+      circle at 0 50%,
+      transparent 8px,
+      var(--color-gold) 9px,
+      transparent 10px
+    );
+
   background-size: 28px 28px;
   background-position: 0 0;
   opacity: 0.18;
 }
 
-/* subtle fade-up on scroll */
+/* =========================================================
+   SUBTLE FADE-UP ANIMATION
+   ========================================================= */
+
 @keyframes ss-fade-up {
   from {
     opacity: 0;
     transform: translateY(18px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
+
 .ss-reveal {
   animation: ss-fade-up 0.7s ease both;
 }
 
-/* Continuous marquee animation for the moving photo gallery */
+/* =========================================================
+   SHYIRA SWEET — INFINITE GALLERY SLIDER
+   ========================================================= */
+
+/*
+   الحركة الأساسية.
+
+   Gallery.tsx يحتوي على نسختين متطابقتين
+   من مجموعة الصور.
+
+   لذلك نحرك المسار بنسبة 50% فقط.
+*/
 @keyframes ss-marquee {
   from {
-    transform: translateX(0);
+    transform: translate3d(0, 0, 0);
   }
+
   to {
-    transform: translateX(-50%);
+    transform: translate3d(-50%, 0, 0);
   }
 }
+
+/*
+   الحاوية الخارجية للسلايدر.
+
+   تمنع الصور من إنشاء Scroll أفقي
+   أو الخروج خارج حدود الشاشة.
+*/
+.ss-gallery-viewport {
+  position: relative;
+
+  width: 100%;
+  max-width: 100vw;
+
+  overflow: hidden;
+
+  /*
+    Fade بسيط على الجانبين
+    ليعطي شكلًا أنعم للسلايدر.
+  */
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 2%,
+    black 98%,
+    transparent 100%
+  );
+
+  mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 2%,
+    black 98%,
+    transparent 100%
+  );
+}
+
+/*
+   المسار الرئيسي.
+
+   يحتوي على:
+   Sequence 1
+   Sequence 2
+
+   وهما نسختان متطابقتان.
+*/
+.ss-gallery-track {
+  display: flex;
+
+  width: max-content;
+  min-width: max-content;
+
+  flex-wrap: nowrap;
+
+  will-change: transform;
+
+  transform: translate3d(0, 0, 0);
+
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/*
+   كل مجموعة من الصور.
+*/
+.ss-gallery-sequence {
+  display: flex;
+
+  flex-shrink: 0;
+
+  align-items: center;
+
+  gap: 1rem;
+
+  /*
+    يجب أن تكون هذه المسافة مساوية تقريبًا
+    للـ gap حتى لا يظهر فرق عند نقطة التكرار.
+  */
+  padding-right: 1rem;
+}
+
+/*
+   الصف الأول:
+   يتحرك من اليمين إلى اليسار.
+*/
 .ss-marquee-track {
-  animation: ss-marquee 38s linear infinite;
+  animation-name: ss-marquee;
+  animation-duration: 55s;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
 }
-.ss-marquee-track:hover {
-  animation-play-state: paused;
-}
+
+/*
+   الصف الثاني:
+   نفس الحركة لكن بالعكس.
+*/
 .ss-marquee-track-reverse {
-  animation: ss-marquee 34s linear infinite reverse;
+  animation-name: ss-marquee;
+  animation-duration: 60s;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-direction: reverse;
 }
-.ss-marquee-track-reverse:hover {
+
+/*
+   عند وضع الماوس فوق أحد الصفوف
+   يتوقف السلايدر مؤقتًا.
+*/
+.ss-gallery-viewport:hover .ss-marquee-track,
+.ss-gallery-viewport:hover .ss-marquee-track-reverse {
   animation-play-state: paused;
 }
 
-/* Dashboard input styles */
+/*
+   تحسين أداء الحركة.
+*/
+.ss-marquee-track,
+.ss-marquee-track-reverse {
+  will-change: transform;
+
+  transform: translate3d(0, 0, 0);
+
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* =========================================================
+   TABLET
+   ========================================================= */
+
+@media (max-width: 1024px) {
+  .ss-marquee-track {
+    animation-duration: 48s;
+  }
+
+  .ss-marquee-track-reverse {
+    animation-duration: 52s;
+  }
+}
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
+
+@media (max-width: 640px) {
+  .ss-gallery-sequence {
+    gap: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .ss-marquee-track {
+    animation-duration: 42s;
+  }
+
+  .ss-marquee-track-reverse {
+    animation-duration: 46s;
+  }
+
+  .ss-gallery-viewport {
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent 0%,
+      black 1%,
+      black 99%,
+      transparent 100%
+    );
+
+    mask-image: linear-gradient(
+      to right,
+      transparent 0%,
+      black 1%,
+      black 99%,
+      transparent 100%
+    );
+  }
+}
+
+/* =========================================================
+   ACCESSIBILITY — REDUCED MOTION
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .ss-marquee-track,
+  .ss-marquee-track-reverse {
+    animation-play-state: paused;
+  }
+}
+
+/* =========================================================
+   DASHBOARD INPUT STYLES
+   ========================================================= */
+
 .ss-input {
   width: 100%;
+
   border-radius: 0.75rem;
-  border: 1px solid rgba(243,221,199,0.3);
-  background: rgba(255,255,255,0.1);
+
+  border: 1px solid rgba(243, 221, 199, 0.3);
+
+  background: rgba(255, 255, 255, 0.1);
+
   padding: 0.75rem 1rem;
+
   font-size: 0.95rem;
+
   color: #f3ddc7;
+
   outline: none;
+
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease;
 }
+
 .ss-input:focus {
   border-color: #f3ddc7;
-  background: rgba(255,255,255,0.15);
+
+  background: rgba(255, 255, 255, 0.15);
 }
-.ss-input::placeholder { color: #f3ddc7; opacity: 0.5; }
+
+.ss-input::placeholder {
+  color: #f3ddc7;
+  opacity: 0.5;
+}
