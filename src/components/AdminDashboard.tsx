@@ -5,15 +5,59 @@ import {
   type SiteSettings,
 } from "../lib/siteSettings";
 
-type InquiryStatus = "New" | "Contacted" | "Completed";
+type InquiryStatus = "new" | "contacted" | "completed";
 
 type Inquiry = {
   id: string;
   name: string;
   contact: string;
   message: string;
-  status: InquiryStatus;
+  status: string;
   created_at: string;
+};
+
+type Product = {
+  id: string;
+  name: string;
+  description: string;
+  price: string;
+  unit: string;
+  image_url: string;
+  alt_text: string;
+  tag: string | null;
+  active: boolean;
+  sort_order: number;
+};
+
+type ProductDraft = {
+  name: string;
+  description: string;
+  price: string;
+  unit: string;
+  image_url: string;
+  alt_text: string;
+  tag: string;
+  active: boolean;
+  sort_order: number;
+};
+
+const EMPTY_PRODUCT: ProductDraft = {
+  name: "",
+  description: "",
+  price: "",
+  unit: "",
+  image_url: "",
+  alt_text: "",
+  tag: "",
+  active: true,
+  sort_order: 100,
+};
+
+const normalizeStatus = (status: string): InquiryStatus => {
+  const value = status.toLowerCase();
+  if (value === "contacted") return "contacted";
+  if (value === "completed") return "completed";
+  return "new";
 };
 
 type PortfolioItem = {
@@ -26,7 +70,7 @@ type PortfolioItem = {
   is_visible: boolean;
 };
 
-type Tab = "inquiries" | "portfolio" | "settings";
+type Tab = "inquiries" | "products" | "portfolio" | "settings";
 
 export default function AdminDashboard() {
   const [checkingAuth, setCheckingAuth] = useState(true);
@@ -197,10 +241,12 @@ function LoginScreen({ externalError }: { externalError?: string }) {
 function Dashboard() {
   const [tab, setTab] = useState<Tab>("inquiries");
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
   const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SITE_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [productModal, setProductModal] = useState<Product | "new" | null>(null);
   const [portfolioModal, setPortfolioModal] = useState<PortfolioItem | "new" | null>(null);
 
   const loadAll = async () => {
@@ -208,14 +254,18 @@ function Dashboard() {
     setLoading(true);
     setError("");
 
-    const [inquiriesResult, portfolioResult, settingsResult] = await Promise.all([
+    const [inquiriesResult, productsResult, portfolioResult, settingsResult] = await Promise.all([
       supabase.from("inquiries").select("*").order("created_at", { ascending: false }),
+      supabase.from("products").select("*").order("sort_order", { ascending: true }),
       supabase.from("portfolio_items").select("*").order("sort_order", { ascending: true }),
       supabase.from("site_settings").select("*").eq("id", 1).maybeSingle(),
     ]);
 
     if (inquiriesResult.error) setError(inquiriesResult.error.message);
     else setInquiries((inquiriesResult.data || []) as Inquiry[]);
+
+    if (productsResult.error) setError((prev) => prev || productsResult.error!.message);
+    else setProducts((productsResult.data || []) as Product[]);
 
     if (portfolioResult.error) setError((prev) => prev || portfolioResult.error!.message);
     else setPortfolio((portfolioResult.data || []) as PortfolioItem[]);
@@ -230,11 +280,12 @@ function Dashboard() {
 
   const counts = useMemo(
     () => ({
-      New: inquiries.filter((i) => i.status === "New").length,
-      Contacted: inquiries.filter((i) => i.status === "Contacted").length,
-      Completed: inquiries.filter((i) => i.status === "Completed").length,
+      New: inquiries.filter((i) => normalizeStatus(i.status) === "new").length,
+      Contacted: inquiries.filter((i) => normalizeStatus(i.status) === "contacted").length,
+      Completed: inquiries.filter((i) => normalizeStatus(i.status) === "completed").length,
+      LiveProducts: products.filter((p) => p.active).length,
     }),
-    [inquiries]
+    [inquiries, products]
   );
 
   const logout = async () => {
@@ -250,10 +301,11 @@ function Dashboard() {
             <img src="/images/logo.png" alt="SHYIRA Sweet" className="h-12 w-12 rounded-full object-cover" />
             <div>
               <h1 className="font-display text-2xl font-bold">SHYIRA Sweet</h1>
-              <p className="text-xs text-[#f3ddc7]/60">Owner Dashboard</p>
+              <p className="text-xs text-[#f3ddc7]/60">Secure Owner Dashboard</p>
             </div>
           </div>
           <div className="flex gap-2">
+            <button onClick={loadAll} className="rounded-full border border-white/20 px-4 py-2 text-sm hover:bg-white/10">Refresh</button>
             <a href="/" className="rounded-full border border-white/20 px-4 py-2 text-sm hover:bg-white/10">View Website</a>
             <button onClick={logout} className="rounded-full bg-white/10 px-4 py-2 text-sm hover:bg-white/15">Sign Out</button>
           </div>
@@ -261,15 +313,17 @@ function Dashboard() {
       </header>
 
       <main className="mx-auto max-w-7xl px-5 py-8">
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label="New Inquiries" value={counts.New} />
           <StatCard label="Contacted" value={counts.Contacted} />
           <StatCard label="Completed" value={counts.Completed} />
+          <StatCard label="Live Products" value={counts.LiveProducts} />
         </div>
 
         <nav className="mt-8 flex flex-wrap gap-2 rounded-2xl bg-white/5 p-2">
           <TabButton active={tab === "inquiries"} onClick={() => setTab("inquiries")}>Inquiries</TabButton>
-          <TabButton active={tab === "portfolio"} onClick={() => setTab("portfolio")}>Portfolio</TabButton>
+          <TabButton active={tab === "products"} onClick={() => setTab("products")}>Products</TabButton>
+          <TabButton active={tab === "portfolio"} onClick={() => setTab("portfolio")}>Gallery / Work</TabButton>
           <TabButton active={tab === "settings"} onClick={() => setTab("settings")}>Settings</TabButton>
         </nav>
 
@@ -279,8 +333,14 @@ function Dashboard() {
           <div className="py-20 text-center text-[#f3ddc7]/60">Loading dashboard…</div>
         ) : (
           <div className="mt-6">
-            {tab === "inquiries" && (
-              <InquiriesPanel inquiries={inquiries} onChanged={loadAll} />
+            {tab === "inquiries" && <InquiriesPanel inquiries={inquiries} onChanged={loadAll} />}
+            {tab === "products" && (
+              <ProductsPanel
+                products={products}
+                onAdd={() => setProductModal("new")}
+                onEdit={(product) => setProductModal(product)}
+                onChanged={loadAll}
+              />
             )}
             {tab === "portfolio" && (
               <PortfolioPanel
@@ -290,12 +350,21 @@ function Dashboard() {
                 onChanged={loadAll}
               />
             )}
-            {tab === "settings" && (
-              <SettingsPanel settings={settings} setSettings={setSettings} />
-            )}
+            {tab === "settings" && <SettingsPanel settings={settings} setSettings={setSettings} />}
           </div>
         )}
       </main>
+
+      {productModal && (
+        <ProductModal
+          product={productModal === "new" ? null : productModal}
+          onClose={() => setProductModal(null)}
+          onSaved={async () => {
+            setProductModal(null);
+            await loadAll();
+          }}
+        />
+      )}
 
       {portfolioModal && (
         <PortfolioModal
@@ -332,8 +401,8 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
 }
 
 function InquiriesPanel({ inquiries, onChanged }: { inquiries: Inquiry[]; onChanged: () => Promise<void> }) {
-  const [filter, setFilter] = useState<"All" | InquiryStatus>("All");
-  const visible = filter === "All" ? inquiries : inquiries.filter((i) => i.status === filter);
+  const [filter, setFilter] = useState<"all" | InquiryStatus>("all");
+  const visible = filter === "all" ? inquiries : inquiries.filter((i) => normalizeStatus(i.status) === filter);
 
   const updateStatus = async (id: string, status: InquiryStatus) => {
     if (!supabase) return;
@@ -356,37 +425,191 @@ function InquiriesPanel({ inquiries, onChanged }: { inquiries: Inquiry[]; onChan
           <h2 className="font-display text-2xl font-bold">Website Inquiries</h2>
           <p className="mt-1 text-sm text-[#f3ddc7]/60">Contact requests submitted through the website. This is not an order system.</p>
         </div>
-        <select value={filter} onChange={(e) => setFilter(e.target.value as any)} className="rounded-xl border border-white/20 bg-[#285c50] px-4 py-2 text-sm">
-          <option>All</option><option>New</option><option>Contacted</option><option>Completed</option>
+        <select value={filter} onChange={(e) => setFilter(e.target.value as "all" | InquiryStatus)} className="rounded-xl border border-white/20 bg-[#285c50] px-4 py-2 text-sm">
+          <option value="all">All</option><option value="new">New</option><option value="contacted">Contacted</option><option value="completed">Completed</option>
         </select>
       </div>
 
       <div className="mt-6 space-y-4">
         {visible.length === 0 && <p className="rounded-2xl bg-white/5 p-8 text-center text-[#f3ddc7]/55">No inquiries here yet.</p>}
-        {visible.map((item) => (
-          <article key={item.id} className="rounded-2xl border border-white/10 bg-black/10 p-5">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-bold">{item.name}</h3>
-                <p className="mt-1 text-sm text-[#e8b64a]">{item.contact}</p>
-                <p className="mt-1 text-xs text-[#f3ddc7]/45">{new Date(item.created_at).toLocaleString()}</p>
+        {visible.map((item) => {
+          const normalized = normalizeStatus(item.status);
+          return (
+            <article key={item.id} className="rounded-2xl border border-white/10 bg-black/10 p-5">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-bold">{item.name}</h3>
+                  <p className="mt-1 text-sm text-[#e8b64a]">{item.contact}</p>
+                  <p className="mt-1 text-xs text-[#f3ddc7]/45">{new Date(item.created_at).toLocaleString()}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={normalized}
+                    onChange={(e) => updateStatus(item.id, e.target.value as InquiryStatus)}
+                    className="rounded-lg border border-white/20 bg-[#285c50] px-3 py-2 text-sm"
+                  >
+                    <option value="new">New</option><option value="contacted">Contacted</option><option value="completed">Completed</option>
+                  </select>
+                  <button onClick={() => remove(item.id)} className="rounded-lg px-3 py-2 text-sm text-red-200 hover:bg-red-950/30">Delete</button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <select
-                  value={item.status}
-                  onChange={(e) => updateStatus(item.id, e.target.value as InquiryStatus)}
-                  className="rounded-lg border border-white/20 bg-[#285c50] px-3 py-2 text-sm"
-                >
-                  <option>New</option><option>Contacted</option><option>Completed</option>
-                </select>
-                <button onClick={() => remove(item.id)} className="rounded-lg px-3 py-2 text-sm text-red-200 hover:bg-red-950/30">Delete</button>
+              <p className="mt-4 whitespace-pre-wrap rounded-xl bg-white/5 p-4 text-sm leading-6 text-[#f3ddc7]/85">{item.message}</p>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function ProductsPanel({ products, onAdd, onEdit, onChanged }: { products: Product[]; onAdd: () => void; onEdit: (product: Product) => void; onChanged: () => Promise<void> }) {
+  const remove = async (product: Product) => {
+    if (!supabase || !confirm(`Delete ${product.name}? This removes it from the public menu.`)) return;
+    const { error } = await supabase.from("products").delete().eq("id", product.id);
+    if (error) alert(error.message);
+    else await onChanged();
+  };
+
+  return (
+    <section className="rounded-3xl border border-white/10 bg-white/5 p-5 sm:p-7">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 className="font-display text-2xl font-bold">Manage Products</h2>
+          <p className="mt-1 text-sm text-[#f3ddc7]/60">Add products, edit prices and descriptions, upload product photos, or hide items from the public menu.</p>
+        </div>
+        <button onClick={onAdd} className="rounded-full bg-[#f3ddc7] px-5 py-2.5 text-sm font-bold text-[#285c50]">+ Add Product</button>
+      </div>
+
+      <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {products.map((product) => (
+          <article key={product.id} className="overflow-hidden rounded-2xl border border-white/10 bg-black/10">
+            <img src={product.image_url} alt={product.alt_text || product.name} className="aspect-[4/3] w-full object-cover" />
+            <div className="p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-bold">{product.name}</h3>
+                  <p className="text-sm text-[#e8b64a]">{product.price} · {product.unit}</p>
+                </div>
+                <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${product.active ? "bg-emerald-400/15 text-emerald-200" : "bg-white/10 text-white/50"}`}>{product.active ? "LIVE" : "HIDDEN"}</span>
+              </div>
+              {product.description && <p className="mt-3 line-clamp-3 text-sm text-[#f3ddc7]/65">{product.description}</p>}
+              <div className="mt-4 flex gap-2">
+                <button onClick={() => onEdit(product)} className="flex-1 rounded-lg bg-white/10 px-3 py-2 text-sm hover:bg-white/15">Edit</button>
+                <button onClick={() => remove(product)} className="rounded-lg px-3 py-2 text-sm text-red-200 hover:bg-red-950/30">Delete</button>
               </div>
             </div>
-            <p className="mt-4 whitespace-pre-wrap rounded-xl bg-white/5 p-4 text-sm leading-6 text-[#f3ddc7]/85">{item.message}</p>
           </article>
         ))}
       </div>
     </section>
+  );
+}
+
+function ProductModal({ product, onClose, onSaved }: { product: Product | null; onClose: () => void; onSaved: () => Promise<void> }) {
+  const [form, setForm] = useState<ProductDraft>(product ? {
+    name: product.name,
+    description: product.description,
+    price: product.price,
+    unit: product.unit,
+    image_url: product.image_url,
+    alt_text: product.alt_text,
+    tag: product.tag || "",
+    active: product.active,
+    sort_order: product.sort_order,
+  } : EMPTY_PRODUCT);
+  const [file, setFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supabase) return;
+    setSaving(true);
+    setError("");
+
+    let imageUrl = form.image_url.trim();
+
+    if (file) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+      const path = `${Date.now()}-${safeName}`;
+      const { error: uploadError } = await supabase.storage.from("product-images").upload(path, file, { upsert: false });
+      if (uploadError) {
+        setError(uploadError.message);
+        setSaving(false);
+        return;
+      }
+      imageUrl = supabase.storage.from("product-images").getPublicUrl(path).data.publicUrl;
+    }
+
+    if (!imageUrl) {
+      setError("Please upload an image or enter an image URL.");
+      setSaving(false);
+      return;
+    }
+
+    const payload = {
+      name: form.name.trim(),
+      description: form.description.trim(),
+      price: form.price.trim(),
+      unit: form.unit.trim(),
+      image_url: imageUrl,
+      alt_text: form.alt_text.trim(),
+      tag: form.tag.trim() || null,
+      active: form.active,
+      sort_order: Number(form.sort_order),
+      updated_at: new Date().toISOString(),
+    };
+
+    const result = product
+      ? await supabase.from("products").update(payload).eq("id", product.id)
+      : await supabase.from("products").insert(payload);
+
+    if (result.error) {
+      setError(result.error.message);
+      setSaving(false);
+      return;
+    }
+
+    await onSaved();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/75 p-4">
+      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-[#285c50] p-7 text-[#f3ddc7] shadow-2xl">
+        <div className="flex items-center justify-between gap-4">
+          <h3 className="font-display text-2xl font-bold">{product ? "Edit Product" : "Add Product"}</h3>
+          <button onClick={onClose} className="text-2xl text-white/60">×</button>
+        </div>
+        <form onSubmit={save} className="mt-6 space-y-4">
+          <input className="ss-input" placeholder="Product name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <textarea className="ss-input min-h-28" placeholder="Description" required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <input className="ss-input" placeholder="Price, e.g. $50 / $25" required value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+            <input className="ss-input" placeholder="Unit, e.g. Large / Small" required value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <input className="ss-input" placeholder="Tag (optional)" value={form.tag} onChange={(e) => setForm({ ...form, tag: e.target.value })} />
+            <input className="ss-input" type="number" placeholder="Sort order" value={form.sort_order} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} />
+          </div>
+          <input className="ss-input" placeholder="Image alt text" value={form.alt_text} onChange={(e) => setForm({ ...form, alt_text: e.target.value })} />
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <label className="block text-xs font-bold uppercase tracking-wide text-[#f3ddc7]/60">Upload Product Image</label>
+            <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} className="mt-2 block w-full text-sm" />
+            <p className="my-3 text-center text-xs text-white/40">OR</p>
+            <input className="ss-input" placeholder="Image URL" value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} />
+          </div>
+          <label className="flex items-center gap-3 rounded-xl bg-white/5 p-3 text-sm">
+            <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} />
+            Show this product on the public menu
+          </label>
+          {error && <p className="rounded-xl bg-red-950/35 p-3 text-sm text-red-100">{error}</p>}
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose} className="flex-1 rounded-full border border-white/25 py-3">Cancel</button>
+            <button disabled={saving} className="flex-1 rounded-full bg-[#f3ddc7] py-3 font-bold text-[#285c50] disabled:opacity-60">{saving ? "Saving…" : "Save Product"}</button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 

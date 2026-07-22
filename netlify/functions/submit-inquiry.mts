@@ -10,20 +10,17 @@ const json = (status: number, body: Record<string, unknown>) =>
   });
 
 export default async (request: Request) => {
-  if (request.method !== "POST") {
-    return json(405, { error: "Method not allowed" });
-  }
+  if (request.method !== "POST") return json(405, { error: "Method not allowed" });
 
   const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseSecretKey =
-    process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !supabaseSecretKey) {
-    console.error("Missing Supabase server environment variables.");
+    console.error("Missing SUPABASE_URL or SUPABASE_SECRET_KEY.");
     return json(500, { error: "Server is not configured." });
   }
 
-  let payload: any;
+  let payload: Record<string, unknown>;
   try {
     payload = await request.json();
   } catch {
@@ -35,20 +32,17 @@ export default async (request: Request) => {
   const message = String(payload.message || "").trim().slice(0, 5000);
   const website = String(payload.website || "").trim();
 
-  // Honeypot: silently accept likely bot submissions without saving them.
   if (website) return json(200, { ok: true });
-
-  if (!name || !contact || !message) {
-    return json(400, { error: "Please complete all required fields." });
-  }
+  if (!name || !contact || !message) return json(400, { error: "Please complete all required fields." });
 
   const supabase = createClient(supabaseUrl, supabaseSecretKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
+  // Do not send status/source here. The database defaults handle both old and new schemas safely.
   const { data, error } = await supabase
     .from("inquiries")
-    .insert({ name, contact, message, status: "New" })
+    .insert({ name, contact, message })
     .select("id, created_at")
     .single();
 
@@ -60,7 +54,7 @@ export default async (request: Request) => {
   const discordWebhook = process.env.DISCORD_WEBHOOK_URL;
   if (discordWebhook) {
     try {
-      await fetch(discordWebhook, {
+      const discordResponse = await fetch(discordWebhook, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -78,8 +72,8 @@ export default async (request: Request) => {
           ],
         }),
       });
+      if (!discordResponse.ok) console.error("Discord webhook returned", discordResponse.status);
     } catch (discordError) {
-      // The inquiry is already saved; Discord failure should not fail the form.
       console.error("Discord notification failed:", discordError);
     }
   }
