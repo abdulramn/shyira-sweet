@@ -9,7 +9,55 @@ type GalleryImage = {
   caption?: string;
 };
 
+/*
+  الصور الأساسية الموجودة داخل:
+  public/images
+
+  هذه الصور ستظهر دائمًا في Gallery.
+  وأي صور تضيفها من Admin Dashboard
+  سيتم دمجها معها تلقائيًا.
+*/
 const FALLBACK_IMAGES: GalleryImage[] = [
+  {
+    src: "/images/Crafted Fresh by Hand.jpeg",
+    alt: "SHYIRA Sweet handcrafted Syrian sweets",
+    caption: "Crafted Fresh by Hand",
+  },
+  {
+    src: "/images/Freshly Made Kunafa.jpeg",
+    alt: "Freshly made kunafa by SHYIRA Sweet",
+    caption: "Freshly Made Kunafa",
+  },
+  {
+    src: "/images/Halawet El Jibn 2.jpeg",
+    alt: "Halawet El Jibn by SHYIRA Sweet",
+    caption: "Halawet El Jibn",
+  },
+  {
+    src: "/images/Halawet El Jibn.jpeg",
+    alt: "Traditional Halawet El Jibn",
+    caption: "Traditional Halawet El Jibn",
+  },
+  {
+    src: "/images/Halawet El Jibn3.jpeg",
+    alt: "Fresh Halawet El Jibn",
+    caption: "Fresh Halawet El Jibn",
+  },
+  {
+    src: "/images/Premium Pistachio Baklava.png",
+    alt: "Premium Pistachio Baklava by SHYIRA Sweet",
+    caption: "Premium Pistachio Baklava",
+  },
+  {
+    src: "/images/The Perfect Cheese Pull.webp",
+    alt: "Fresh kunafa cheese pull",
+    caption: "The Perfect Cheese Pull",
+  },
+  {
+    src: "/images/Traditional Madlouqa2.jpeg",
+    alt: "Traditional Syrian Madlouqa",
+    caption: "Traditional Madlouqa",
+  },
   {
     src: "/images/awameh.jpg",
     alt: "SHYIRA Sweet Awameh",
@@ -46,11 +94,11 @@ function Row({
   }
 
   /*
-    نكرر الصور عدة مرات حتى يكون السلايدر
-    أعرض من أي شاشة Desktop كبيرة.
+    نكرر الصور بما يكفي لتغطية حتى
+    الشاشات الكبيرة جدًا.
 
-    بعد ذلك نكرر المجموعة كاملة مرتين
-    حتى نحصل على Infinite Loop بدون فراغ.
+    بعدها نعرض المجموعة مرتين للحصول
+    على Infinite Loop بدون فراغ.
   */
   const minimumCards = 16;
 
@@ -111,12 +159,19 @@ function Row({
 }
 
 export default function Gallery() {
+  /*
+    نبدأ بالصور الموجودة في public/images.
+  */
   const [images, setImages] =
     useState<GalleryImage[]>(FALLBACK_IMAGES);
 
   const [modalIndex, setModalIndex] =
     useState<number | null>(null);
 
+  /*
+    نحضر الصور التي أضفتها من Admin Dashboard
+    ونضيفها إلى الصور الأساسية بدل استبدالها.
+  */
   useEffect(() => {
     if (!supabase) {
       return;
@@ -130,34 +185,64 @@ export default function Gallery() {
       .eq("is_visible", true)
       .order("sort_order", { ascending: true })
       .then(({ data, error }) => {
-        if (!error && data && data.length > 0) {
-          const validImages = data
-            .filter(
-              (item: any) =>
-                typeof item.image_url === "string" &&
-                item.image_url.trim() !== ""
-            )
-            .map((item: any) => ({
-              src: item.image_url,
-              alt: item.title || "SHYIRA Sweet work",
-              caption: item.description
-                ? `${item.title} — ${item.description}`
-                : item.title,
-            }));
-
-          if (validImages.length > 0) {
-            setImages(validImages);
-          }
+        if (error) {
+          console.error(
+            "Could not load gallery images from Supabase:",
+            error
+          );
+          return;
         }
+
+        if (!data || data.length === 0) {
+          return;
+        }
+
+        const adminImages: GalleryImage[] = data
+          .filter(
+            (item: any) =>
+              typeof item.image_url === "string" &&
+              item.image_url.trim() !== ""
+          )
+          .map((item: any) => ({
+            src: item.image_url.trim(),
+            alt:
+              item.title?.trim() ||
+              "SHYIRA Sweet work",
+            caption: item.description
+              ? `${item.title} — ${item.description}`
+              : item.title || "SHYIRA Sweet",
+          }));
+
+        /*
+          دمج صور GitHub مع صور Admin.
+
+          نمنع تكرار نفس الصورة إذا كان
+          رابطها موجودًا أكثر من مرة.
+        */
+        const combinedImages = [
+          ...FALLBACK_IMAGES,
+          ...adminImages,
+        ];
+
+        const uniqueImages = combinedImages.filter(
+          (image, index, array) =>
+            array.findIndex(
+              (item) => item.src === image.src
+            ) === index
+        );
+
+        setImages(uniqueImages);
       });
   }, []);
 
   /*
-    نقسم الصور بين صفين:
-    الصورة الأولى للصف الأول
-    الثانية للصف الثاني
-    الثالثة للأول
-    الرابعة للثاني...
+    تقسيم الصور إلى صفين.
+
+    1 → الصف الأول
+    2 → الصف الثاني
+    3 → الصف الأول
+    4 → الصف الثاني
+    وهكذا...
   */
   const { row1, row2 } = useMemo(() => {
     const first: GalleryImage[] = [];
@@ -172,10 +257,13 @@ export default function Gallery() {
     });
 
     /*
-      إذا كان لدينا صورة واحدة فقط،
-      نجعلها تظهر في الصفين.
+      إذا كان هناك صورة واحدة فقط،
+      نعرضها في الصفين.
     */
-    if (second.length === 0 && first.length > 0) {
+    if (
+      second.length === 0 &&
+      first.length > 0
+    ) {
       second.push(...first);
     }
 
@@ -185,12 +273,20 @@ export default function Gallery() {
     };
   }, [images]);
 
-  const allGalleryPhotos: Photo[] = images.map((photo) => ({
-    src: photo.src,
-    alt: photo.alt,
-    caption: photo.caption,
-  }));
+  /*
+    تجهيز جميع الصور للـ Image Modal.
+  */
+  const allGalleryPhotos: Photo[] = images.map(
+    (photo) => ({
+      src: photo.src,
+      alt: photo.alt,
+      caption: photo.caption,
+    })
+  );
 
+  /*
+    فتح الصورة بالحجم الكامل عند الضغط عليها.
+  */
   const openGallery = (
     localIndex: number,
     row: 1 | 2
@@ -218,6 +314,7 @@ export default function Gallery() {
       id="gallery"
       className="overflow-hidden bg-cream-deep py-14 sm:py-20"
     >
+      {/* Gallery Heading */}
       <div className="mx-auto max-w-6xl px-5 text-center">
         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-maroon">
           Our Work
@@ -228,14 +325,16 @@ export default function Gallery() {
         </h2>
 
         <p className="mx-auto mt-3 max-w-lg text-sm text-brown-soft sm:text-base">
-          A look at our recent work. Tap any photo to
-          view it full-size.
+          A look at our recent work. Tap any photo
+          to view it full-size.
         </p>
 
         <Ornament className="mt-6" />
       </div>
 
+      {/* Infinite Gallery Slider */}
       <div className="mt-10 w-full space-y-4">
+        {/* First Row */}
         <Row
           images={row1}
           onImageClick={(index) =>
@@ -243,6 +342,7 @@ export default function Gallery() {
           }
         />
 
+        {/* Second Row — Reverse Direction */}
         <Row
           images={row2}
           reverse
@@ -252,11 +352,14 @@ export default function Gallery() {
         />
       </div>
 
+      {/* Full-size Image Modal */}
       {modalIndex !== null && (
         <ImageModal
           photos={allGalleryPhotos}
           startIndex={modalIndex}
-          onClose={() => setModalIndex(null)}
+          onClose={() =>
+            setModalIndex(null)
+          }
         />
       )}
     </section>
