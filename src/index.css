@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+/* =========================================================
+   SHYIRA Sweet — Theme tokens
+   Warm Middle Eastern dessert palette:
+   deep green (from logo), gold, deep maroon, cream, warm brown
+   ========================================================= */
+@theme {
+  --font-display: "Playfair Display", "Amiri", Georgia, serif;
+  --font-arabic: "Amiri", "Playfair Display", serif;
+  --font-body: "Nunito Sans", ui-sans-serif, system-ui, sans-serif;
+
+  /* Updated brand colors from logo */
+  --color-green-deep: #285c50;
+  --color-green-soft: #3a7667;
+  --color-gold: #d69b28;
+  --color-gold-soft: #e8b64a;
+  --color-maroon: #7a1f2b;
+  --color-maroon-soft: #9c2c3a;
+  --color-cream: #faf3e6;
+  --color-cream-deep: #f3ddc7;
+  --color-brown: #5a3b22;
+  --color-brown-soft: #8a6141;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--color-cream);
+  color: var(--color-brown);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Ornamental scrolling divider pattern reminiscent of arabesque tilework */
+.ss-pattern {
+  background-color: transparent;
+  background-image:
+    radial-gradient(circle at 50% 0, transparent 8px, var(--color-gold) 9px, transparent 10px),
+    radial-gradient(circle at 0 50%, transparent 8px, var(--color-gold) 9px, transparent 10px);
+  background-size: 28px 28px;
+  background-position: 0 0;
+  opacity: 0.18;
+}
+
+/* subtle fade-up on scroll */
+@keyframes ss-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.ss-reveal {
+  animation: ss-fade-up 0.7s ease both;
+}
+
+/* Continuous marquee animation for the moving photo gallery */
+@keyframes ss-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.ss-marquee-track {
+  animation: ss-marquee 38s linear infinite;
+}
+.ss-marquee-track:hover {
+  animation-play-state: paused;
+}
+.ss-marquee-track-reverse {
+  animation: ss-marquee 34s linear infinite reverse;
+}
+.ss-marquee-track-reverse:hover {
+  animation-play-state: paused;
+}
+
+/* Dashboard input styles */
+.ss-input {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(243,221,199,0.3);
+  background: rgba(255,255,255,0.1);
+  padding: 0.75rem 1rem;
+  font-size: 0.95rem;
+  color: #f3ddc7;
+  outline: none;
+}
+.ss-input:focus {
+  border-color: #f3ddc7;
+  background: rgba(255,255,255,0.15);
+}
+.ss-input::placeholder { color: #f3ddc7; opacity: 0.5; }
