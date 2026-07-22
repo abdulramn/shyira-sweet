@@ -18,7 +18,7 @@ const WHATSAPP_LINK = "17346293442";
 const CITY = "Michigan, USA";
 
 // TODO: Replace with real Formspree endpoint after creating account at https://formspree.io
-const FORMSPREE_ENDPOINT = "https://formspree.io/f/xpwqpqny";
+const FORMSPREE_ENDPOINT = "https://formspree.io/f/mzdnvqoq";
 
 export default function Contact() {
   const [sent, setSent] = useState(false);
