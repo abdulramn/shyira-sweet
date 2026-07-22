@@ -21,7 +21,7 @@ type Item = {
 const ITEMS: Item[] = [
   {
     name: "Kunafa Cheese",
-    desc: "Freshly baked cheese kunafa — golden, crispy, and stretchy. Made to order for the perfect cheese pull, crowned with crushed pistachios.",
+    desc: "Freshly baked cheese kunafa — golden, crispy, and stretchy. Prepared for the perfect cheese pull, crowned with crushed pistachios.",
     price: "$50 / $25",
     unit: "Large / Small",
     image:
@@ -99,8 +99,7 @@ export default function Menu() {
             The Sweets Table
           </h2>
           <p className="mx-auto mt-3 max-w-lg text-sm text-brown-soft sm:text-base">
-            Everything is baked fresh to order. Please place orders at least 48
-            hours ahead so we can make yours the way it should be — by hand.
+            Everything is prepared fresh by hand. Browse our signature sweets, then contact us to ask about availability, events, or custom requests.
           </p>
           <Ornament className="mt-6" />
         </div>
@@ -154,7 +153,7 @@ export default function Menu() {
         </div>
 
         <p className="mt-8 text-center text-xs italic text-brown-soft">
-          Custom quantities and dietary requests are always welcome. Tap any photo to enlarge.
+          Questions about quantities, events, or dietary requests are always welcome. Tap any photo to enlarge.
         </p>
       </div>
 

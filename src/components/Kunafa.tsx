@@ -22,7 +22,7 @@ export default function Kunafa() {
 
         <div className="order-1 md:order-2">
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-gold-soft">
-            Made to Order · Weddings & Events
+            Weddings & Events
           </p>
           <h2 className="mt-2 font-display text-3xl font-bold text-cream sm:text-4xl">
             Fresh Kunafa for Your Celebration
@@ -55,10 +55,10 @@ export default function Kunafa() {
               href="#contact"
               className="inline-block rounded-full bg-gold px-8 py-3 text-sm font-bold uppercase tracking-wide text-green-deep shadow-md transition-transform hover:-translate-y-0.5"
             >
-              Inquire & Book Your Date
+              Inquire About Your Date
             </a>
             <p className="mt-3 text-xs text-cream/70">
-              Events book up fast, especially wedding season — reach out early
+              Event availability can fill quickly during wedding season — reach out early
               to reserve your date.
             </p>
           </div>
