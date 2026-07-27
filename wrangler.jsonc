@@ -3,15 +3,39 @@
   "main": "worker/index.ts",
   "compatibility_date": "2026-07-27",
 
+  /*
+    Preserve runtime variables configured
+    inside the Cloudflare dashboard when
+    GitHub triggers a new Wrangler deployment.
+  */
+  "keep_vars": true,
+
+  /*
+    Serve the React/Vite production build
+    as static assets.
+  */
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
+
+    /*
+      React single-page application fallback.
+      Unknown website routes return index.html.
+    */
     "not_found_handling": "single-page-application",
+
+    /*
+      API requests must reach worker/index.ts
+      before Cloudflare checks static assets.
+    */
     "run_worker_first": [
       "/api/*"
     ]
   },
 
+  /*
+    Enable Worker logs and observability.
+  */
   "observability": {
     "enabled": true
   }
