@@ -1,11 +1,23 @@
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+
 import Ornament from "./Ornament";
+
 import {
   DEFAULT_SITE_SETTINGS,
   fetchSiteSettings,
   type SiteSettings,
 } from "../lib/siteSettings";
-import { supabase } from "../lib/supabase";
+
+type InquiryResponse = {
+  ok?: boolean;
+  id?: string;
+  error?: string;
+};
 
 export default function Contact() {
   const [settings, setSettings] =
@@ -16,28 +28,50 @@ export default function Contact() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetchSiteSettings().then(setSettings);
+    let mounted = true;
+
+    fetchSiteSettings()
+      .then((result) => {
+        if (mounted) {
+          setSettings(result);
+        }
+      })
+      .catch((settingsError) => {
+        console.error(
+          "Could not load site settings:",
+          settingsError
+        );
+      });
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const handleSubmit = async (
-    e: React.FormEvent<HTMLFormElement>
+    event: FormEvent<HTMLFormElement>
   ) => {
-    e.preventDefault();
+    event.preventDefault();
 
     setSending(true);
     setError("");
 
-    const form = e.currentTarget;
+    const form = event.currentTarget;
     const formData = new FormData(form);
 
     const payload = {
-      name: String(formData.get("name") || "").trim(),
+      name: String(
+        formData.get("name") || ""
+      ).trim(),
+
       contact: String(
         formData.get("contact") || ""
       ).trim(),
+
       message: String(
         formData.get("message") || ""
       ).trim(),
+
       website: String(
         formData.get("website") || ""
       ).trim(),
@@ -51,13 +85,16 @@ export default function Contact() {
       setError(
         "Please complete all required fields."
       );
+
       setSending(false);
       return;
     }
 
     /*
-      Honeypot spam protection.
-      Real visitors will never fill this field.
+      Honeypot protection.
+
+      Real visitors never see or complete
+      the website field.
     */
     if (payload.website) {
       setSent(true);
@@ -66,85 +103,99 @@ export default function Contact() {
       return;
     }
 
-    let saved = false;
-    let lastError = "";
-
     /*
-      Primary path:
-      Netlify Function
-
-      This saves the inquiry to Supabase
-      and sends the Discord notification.
+      Stop the request if the server takes
+      longer than 20 seconds.
     */
+    const controller = new AbortController();
+
+    const requestTimeout = window.setTimeout(
+      () => controller.abort(),
+      20000
+    );
+
     try {
+      /*
+        Cloudflare Pages Function.
+
+        This function will:
+        1. Validate the form.
+        2. Save the inquiry in Supabase.
+        3. Send the Discord notification.
+      */
       const response = await fetch(
-        "/.netlify/functions/submit-inquiry",
+        "/api/submit-inquiry",
         {
           method: "POST",
+
           headers: {
             "Content-Type": "application/json",
           },
+
           body: JSON.stringify(payload),
+
+          signal: controller.signal,
         }
       );
 
-      if (response.ok) {
-        saved = true;
-      } else {
-        const result = await response
+      const result =
+        (await response
           .json()
-          .catch(() => ({}));
+          .catch(() => ({}))) as InquiryResponse;
 
-        lastError =
+      if (!response.ok || result.ok !== true) {
+        throw new Error(
           result.error ||
-          `Server error (${response.status})`;
+            `Server error (${response.status})`
+        );
       }
-    } catch (functionError) {
-      lastError =
-        functionError instanceof Error
-          ? functionError.message
-          : "Network error";
-    }
 
-    /*
-      Safety fallback:
-      If Netlify Function fails,
-      still try to save the inquiry directly
-      to Supabase.
-    */
-    if (!saved && supabase) {
-      const { error: insertError } =
-        await supabase
-          .from("inquiries")
-          .insert({
-            name: payload.name,
-            contact: payload.contact,
-            message: payload.message,
-          });
-
-      if (!insertError) {
-        saved = true;
-      } else {
-        lastError = insertError.message;
-      }
-    }
-
-    if (saved) {
       setSent(true);
       form.reset();
-    } else {
-      console.error(
-        "Could not save inquiry:",
-        lastError
-      );
+    } catch (submissionError) {
+      if (
+        submissionError instanceof DOMException &&
+        submissionError.name === "AbortError"
+      ) {
+        console.error(
+          "Inquiry submission timed out."
+        );
 
-      setError(
-        "Could not send your inquiry. Please try again in a moment, call us, or contact us on Instagram."
-      );
+        setError(
+          "The request took too long. Please check your connection and try again."
+        );
+      } else {
+        const errorMessage =
+          submissionError instanceof Error
+            ? submissionError.message
+            : "Unknown submission error";
+
+        console.error(
+          "Could not send inquiry:",
+          errorMessage
+        );
+
+        setError(
+          "Could not send your inquiry. Please try again in a moment, call us, or contact us on Instagram."
+        );
+      }
+    } finally {
+      window.clearTimeout(requestTimeout);
+      setSending(false);
     }
-
-    setSending(false);
   };
+
+  const rawPhoneLink = String(
+    settings.phone_link || ""
+  ).trim();
+
+  const phoneHref = rawPhoneLink
+    ? `tel:${
+        rawPhoneLink.startsWith("+")
+          ? rawPhoneLink
+          : `+${rawPhoneLink}`
+      }`
+    : "tel:+17346293442";
 
   return (
     <section
@@ -152,8 +203,8 @@ export default function Contact() {
       className="bg-cream py-16 sm:py-24"
     >
       <div className="mx-auto max-w-6xl px-5">
-
         {/* SECTION HEADING */}
+
         <div className="text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-maroon">
             Contact SHYIRA Sweet
@@ -174,14 +225,13 @@ export default function Contact() {
         </div>
 
         <div className="mt-12 grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
-
           {/* ==================================================
               DIRECT CONTACT CARD
              ================================================== */}
 
           <div className="relative overflow-hidden rounded-3xl border border-gold/25 bg-white shadow-[0_20px_60px_rgba(90,59,34,0.08)]">
-
             {/* Decorative top area */}
+
             <div className="bg-green-deep px-7 py-8 text-cream sm:px-8">
               <p className="text-xs font-bold uppercase tracking-[0.25em] text-gold-soft">
                 Reach Us Directly
@@ -200,10 +250,10 @@ export default function Contact() {
             </div>
 
             <div className="space-y-3 p-5 sm:p-7">
-
               {/* PHONE */}
+
               <ContactCard
-                href={`tel:+${settings.phone_link}`}
+                href={phoneHref}
                 title="Call Us"
                 value={settings.phone_display}
                 helper="Tap to call SHYIRA Sweet"
@@ -211,6 +261,7 @@ export default function Contact() {
               />
 
               {/* INSTAGRAM */}
+
               <ContactCard
                 href={settings.instagram_url}
                 title="Instagram"
@@ -221,6 +272,7 @@ export default function Contact() {
               />
 
               {/* FACEBOOK */}
+
               <ContactCard
                 href={settings.facebook_url}
                 title="Facebook"
@@ -231,6 +283,7 @@ export default function Contact() {
               />
 
               {/* LOCATION */}
+
               <div className="flex items-center gap-4 rounded-2xl border border-gold/15 bg-cream/60 p-4">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-green-deep text-cream">
                   <MapPinIcon />
@@ -248,6 +301,7 @@ export default function Contact() {
               </div>
 
               {/* MESSAGE */}
+
               <div className="mt-5 rounded-2xl border border-gold/20 bg-cream-deep/70 p-5">
                 <p className="font-display text-lg font-semibold text-green-deep">
                   Planning something sweet?
@@ -269,7 +323,8 @@ export default function Contact() {
 
           <form
             onSubmit={handleSubmit}
-            className="rounded-3xl border border-gold/25 bg-white p-6 shadow-[0_20px_60px_rgba(90,59,34,0.08)] sm:p-8"
+            className="relative rounded-3xl border border-gold/25 bg-white p-6 shadow-[0_20px_60px_rgba(90,59,34,0.08)] sm:p-8"
+            aria-busy={sending}
           >
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-maroon">
@@ -288,8 +343,11 @@ export default function Contact() {
             </div>
 
             {sent ? (
-              <div className="mt-8 rounded-2xl border border-green-deep/10 bg-green-deep/10 p-8 text-center">
-
+              <div
+                className="mt-8 rounded-2xl border border-green-deep/10 bg-green-deep/10 p-8 text-center"
+                role="status"
+                aria-live="polite"
+              >
                 <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-deep text-2xl text-cream">
                   ✓
                 </div>
@@ -306,7 +364,10 @@ export default function Contact() {
 
                 <button
                   type="button"
-                  onClick={() => setSent(false)}
+                  onClick={() => {
+                    setSent(false);
+                    setError("");
+                  }}
                   className="mt-5 text-xs font-bold uppercase tracking-wide text-maroon underline underline-offset-4"
                 >
                   Send Another Inquiry
@@ -314,7 +375,6 @@ export default function Contact() {
               </div>
             ) : (
               <div className="mt-7 space-y-5">
-
                 <Field
                   label="Your Name"
                   id="name"
@@ -324,6 +384,8 @@ export default function Contact() {
                     name="name"
                     type="text"
                     required
+                    maxLength={120}
+                    autoComplete="name"
                     placeholder="e.g. Layla"
                     className="ss-form-input"
                   />
@@ -338,6 +400,8 @@ export default function Contact() {
                     name="contact"
                     type="text"
                     required
+                    maxLength={200}
+                    autoComplete="email"
                     placeholder="How should we reach you?"
                     className="ss-form-input"
                   />
@@ -352,14 +416,16 @@ export default function Contact() {
                     name="message"
                     rows={5}
                     required
+                    maxLength={5000}
                     placeholder="Tell us what you're interested in, your event date, or any questions you have..."
                     className="ss-form-input resize-none"
                   />
                 </Field>
 
                 {/* SPAM HONEYPOT */}
+
                 <div
-                  className="absolute left-[-9999px]"
+                  className="absolute left-[-9999px] top-auto h-px w-px overflow-hidden"
                   aria-hidden="true"
                 >
                   <label htmlFor="website">
@@ -376,7 +442,11 @@ export default function Contact() {
                 </div>
 
                 {error && (
-                  <p className="rounded-xl border border-maroon/10 bg-maroon/10 p-4 text-sm text-maroon">
+                  <p
+                    className="rounded-xl border border-maroon/10 bg-maroon/10 p-4 text-sm text-maroon"
+                    role="alert"
+                    aria-live="assertive"
+                  >
                     {error}
                   </p>
                 )}
@@ -406,24 +476,24 @@ export default function Contact() {
         .ss-form-input {
           width: 100%;
           border-radius: 0.9rem;
-          border: 1px solid rgba(214,155,40,.35);
+          border: 1px solid rgba(214, 155, 40, 0.35);
           background: #faf3e6;
-          padding: .85rem 1rem;
-          font-size: .95rem;
+          padding: 0.85rem 1rem;
+          font-size: 0.95rem;
           color: #5a3b22;
           outline: none;
           font-family: inherit;
           transition:
-            border-color .2s ease,
-            box-shadow .2s ease,
-            background-color .2s ease;
+            border-color 0.2s ease,
+            box-shadow 0.2s ease,
+            background-color 0.2s ease;
         }
 
         .ss-form-input:focus {
           border-color: #7a1f2b;
-          background: #fff;
+          background: #ffffff;
           box-shadow:
-            0 0 0 3px rgba(122,31,43,.10);
+            0 0 0 3px rgba(122, 31, 43, 0.1);
         }
 
         .ss-form-input::placeholder {
@@ -450,14 +520,18 @@ function ContactCard({
   title: string;
   value: string;
   helper: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   external?: boolean;
 }) {
   return (
     <a
       href={href}
       target={external ? "_blank" : undefined}
-      rel={external ? "noreferrer" : undefined}
+      rel={
+        external
+          ? "noopener noreferrer"
+          : undefined
+      }
       className="group flex items-center gap-4 rounded-2xl border border-gold/15 bg-cream/40 p-4 transition-all hover:-translate-y-0.5 hover:border-gold/40 hover:bg-cream hover:shadow-md"
     >
       <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-green-deep text-cream transition-transform group-hover:scale-105">
@@ -478,7 +552,10 @@ function ContactCard({
         </p>
       </div>
 
-      <span className="text-lg text-gold transition-transform group-hover:translate-x-1">
+      <span
+        className="text-lg text-gold transition-transform group-hover:translate-x-1"
+        aria-hidden="true"
+      >
         →
       </span>
     </a>
@@ -492,7 +569,7 @@ function Field({
 }: {
   label: string;
   id: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <div>
@@ -523,6 +600,7 @@ function PhoneIcon() {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
+      aria-hidden="true"
     >
       <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.33 1.78.62 2.63a2 2 0 0 1-.45 2.11L8 9.73a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.85.29 1.73.5 2.63.62A2 2 0 0 1 22 16.92z" />
     </svg>
@@ -538,6 +616,7 @@ function InstagramIcon() {
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
+      aria-hidden="true"
     >
       <rect
         x="3"
@@ -571,6 +650,7 @@ function FacebookIcon() {
       height="20"
       viewBox="0 0 24 24"
       fill="currentColor"
+      aria-hidden="true"
     >
       <path d="M14 8h3V4h-3c-3.3 0-5 2-5 5v2H6v4h3v7h4v-7h3.2l.8-4H13V9c0-.7.3-1 1-1z" />
     </svg>
@@ -588,6 +668,7 @@ function MapPinIcon() {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
+      aria-hidden="true"
     >
       <path d="M21 10c0 7-9 12-9 12S3 17 3 10a9 9 0 1 1 18 0z" />
 
