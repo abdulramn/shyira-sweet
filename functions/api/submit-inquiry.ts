@@ -1,16 +1,23 @@
 import { createClient } from "@supabase/supabase-js";
 
 interface Env {
-  SUPABASE_URL: string;
+  SUPABASE_URL?: string;
   SUPABASE_SECRET_KEY?: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;
   DISCORD_WEBHOOK_URL?: string;
 }
 
-interface CloudflareContext {
+interface PagesContext {
   request: Request;
   env: Env;
 }
+
+type RequestPayload = {
+  name?: unknown;
+  contact?: unknown;
+  message?: unknown;
+  website?: unknown;
+};
 
 const jsonResponse = (
   status: number,
@@ -19,28 +26,47 @@ const jsonResponse = (
   new Response(JSON.stringify(body), {
     status,
     headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store",
+      "Content-Type":
+        "application/json; charset=utf-8",
+
+      "Cache-Control":
+        "no-store, no-cache, must-revalidate",
+
       "X-Content-Type-Options": "nosniff",
     },
   });
 
 export async function onRequest(
-  context: CloudflareContext
+  context: PagesContext
 ): Promise<Response> {
   const { request, env } = context;
 
   if (request.method !== "POST") {
     return jsonResponse(405, {
-      error: "Method not allowed",
+      error: "Method not allowed.",
     });
   }
 
-  const supabaseUrl = env.SUPABASE_URL;
+  const contentType =
+    request.headers.get("Content-Type") || "";
+
+  if (
+    !contentType
+      .toLowerCase()
+      .includes("application/json")
+  ) {
+    return jsonResponse(415, {
+      error:
+        "Content-Type must be application/json.",
+    });
+  }
+
+  const supabaseUrl =
+    env.SUPABASE_URL?.trim();
 
   const supabaseSecretKey =
-    env.SUPABASE_SECRET_KEY ||
-    env.SUPABASE_SERVICE_ROLE_KEY;
+    env.SUPABASE_SECRET_KEY?.trim() ||
+    env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 
   if (!supabaseUrl || !supabaseSecretKey) {
     console.error(
@@ -52,33 +78,45 @@ export async function onRequest(
     });
   }
 
-  let payload: Record<string, unknown>;
+  let payload: RequestPayload;
 
   try {
-    payload = await request.json();
+    payload =
+      (await request.json()) as RequestPayload;
   } catch {
     return jsonResponse(400, {
-      error: "Invalid request.",
+      error: "Invalid request body.",
     });
   }
 
-  const name = String(payload.name || "")
+  const name = String(
+    payload.name || ""
+  )
     .trim()
     .slice(0, 120);
 
-  const contact = String(payload.contact || "")
+  const contact = String(
+    payload.contact || ""
+  )
     .trim()
     .slice(0, 200);
 
-  const message = String(payload.message || "")
+  const message = String(
+    payload.message || ""
+  )
     .trim()
     .slice(0, 5000);
 
-  const website = String(payload.website || "").trim();
+  const website = String(
+    payload.website || ""
+  ).trim();
 
   /*
     Honeypot spam protection.
-    Real visitors do not fill this field.
+
+    Return success silently so automated
+    spam systems do not learn that they
+    were blocked.
   */
   if (website) {
     return jsonResponse(200, {
@@ -88,7 +126,8 @@ export async function onRequest(
 
   if (!name || !contact || !message) {
     return jsonResponse(400, {
-      error: "Please complete all required fields.",
+      error:
+        "Please complete all required fields.",
     });
   }
 
@@ -99,13 +138,16 @@ export async function onRequest(
       auth: {
         persistSession: false,
         autoRefreshToken: false,
+        detectSessionInUrl: false,
       },
     }
   );
 
   /*
-    Save the inquiry to Supabase.
-    Database defaults manage status/source.
+    Save inquiry in Supabase.
+
+    The database defaults continue to manage
+    fields such as status and source.
   */
   const { data, error } = await supabase
     .from("inquiries")
@@ -118,7 +160,10 @@ export async function onRequest(
     .single();
 
   if (error) {
-    console.error("Supabase insert failed:", error);
+    console.error(
+      "Supabase insert failed:",
+      error
+    );
 
     return jsonResponse(500, {
       error: "Could not save your inquiry.",
@@ -126,11 +171,16 @@ export async function onRequest(
   }
 
   /*
-    Send the Discord notification.
-    Discord failure must not delete or fail
-    the already saved inquiry.
+    Discord notification.
+
+    The inquiry has already been saved.
+    Therefore Discord failure will be logged
+    but will not cause the customer form to fail.
   */
-  if (env.DISCORD_WEBHOOK_URL) {
+  const discordWebhook =
+    env.DISCORD_WEBHOOK_URL?.trim();
+
+  if (discordWebhook) {
     try {
       const discordMessage =
         message.length > 1000
@@ -138,29 +188,30 @@ export async function onRequest(
           : message;
 
       const discordResponse = await fetch(
-        env.DISCORD_WEBHOOK_URL,
+        discordWebhook,
         {
           method: "POST",
+
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
+
           body: JSON.stringify({
-            username: "SHYIRA Sweet Website",
+            username:
+              "SHYIRA Sweet Website",
 
             avatar_url:
               "https://shiyrasweet.com/images/logo.png",
 
-            /*
-              Prevent @everyone, @here,
-              and unwanted user mentions.
-            */
             allowed_mentions: {
               parse: [],
             },
 
             embeds: [
               {
-                title: "🍰 New Website Inquiry",
+                title:
+                  "🍰 New Website Inquiry",
 
                 url:
                   "https://shiyrasweet.com/?admin",
@@ -168,7 +219,10 @@ export async function onRequest(
                 description:
                   "A new inquiry was submitted through the **SHYIRA Sweet** website.",
 
-                // Brand color #285c50
+                /*
+                  SHYIRA Sweet green:
+                  #285c50
+                */
                 color: 2645072,
 
                 fields: [
@@ -177,25 +231,32 @@ export async function onRequest(
                     value: name,
                     inline: true,
                   },
+
                   {
                     name: "📞 Contact",
                     value: contact,
                     inline: true,
                   },
+
                   {
                     name: "💬 Inquiry",
                     value: discordMessage,
                     inline: false,
                   },
+
                   {
                     name: "📌 Status",
                     value: "🟢 New",
                     inline: true,
                   },
+
                   {
-                    name: "🔐 Admin Dashboard",
+                    name:
+                      "🔐 Admin Dashboard",
+
                     value:
                       "[Open SHYIRA Sweet Dashboard](https://shiyrasweet.com/?admin)",
+
                     inline: false,
                   },
                 ],
@@ -203,6 +264,7 @@ export async function onRequest(
                 footer: {
                   text:
                     "SHYIRA Sweet • Website Inquiry System",
+
                   icon_url:
                     "https://shiyrasweet.com/images/logo.png",
                 },
@@ -234,6 +296,10 @@ export async function onRequest(
         discordError
       );
     }
+  } else {
+    console.warn(
+      "DISCORD_WEBHOOK_URL is not configured."
+    );
   }
 
   return jsonResponse(200, {
