@@ -1,3 +1,6 @@
+.ts
+
+
 import {
   createClient,
   type SupabaseClient,
@@ -44,6 +47,19 @@ type UpdateAdminPayload = {
   fullName?: unknown;
   password?: unknown;
   active?: unknown;
+};
+
+
+type SiteSettingsPayload = {
+  phone_display?: unknown;
+  phone_link?: unknown;
+  whatsapp_link?: unknown;
+  city?: unknown;
+  instagram_url?: unknown;
+  instagram_handle?: unknown;
+  facebook_url?: unknown;
+  footer_tagline?: unknown;
+  footer_rights_text?: unknown;
 };
 
 type AuthorizedAdmin = {
@@ -904,6 +920,174 @@ async function handleAdminUserItem(
   });
 }
 
+
+async function handleAdminSettings(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  if (request.method !== "PATCH") {
+    return jsonResponse(405, {
+      error: "Method not allowed.",
+    });
+  }
+
+  const authorization = await authorizeAdmin(
+    request,
+    env
+  );
+
+  if ("response" in authorization) {
+    return authorization.response;
+  }
+
+  const contentTypeError =
+    requireJsonRequest(request);
+
+  if (contentTypeError) {
+    return contentTypeError;
+  }
+
+  let payload: SiteSettingsPayload;
+
+  try {
+    payload =
+      (await request.json()) as SiteSettingsPayload;
+  } catch {
+    return jsonResponse(400, {
+      error: "Invalid request body.",
+    });
+  }
+
+  const {
+    supabase,
+    isOwner,
+  } = authorization.value;
+
+  const {
+    data: currentSettings,
+    error: currentSettingsError,
+  } = await supabase
+    .from("site_settings")
+    .select("*")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (
+    currentSettingsError ||
+    !currentSettings
+  ) {
+    console.error(
+      "Could not load site settings:",
+      currentSettingsError
+    );
+
+    return jsonResponse(500, {
+      error:
+        "Could not load the current website settings.",
+    });
+  }
+
+  const nextCopyrightText =
+    isOwner
+      ? cleanText(
+          payload.footer_rights_text,
+          300
+        )
+      : cleanText(
+          currentSettings.footer_rights_text,
+          300
+        );
+
+  if (
+    isOwner &&
+    !nextCopyrightText
+  ) {
+    return jsonResponse(400, {
+      error:
+        "Copyright / rights text cannot be empty.",
+    });
+  }
+
+  const updatePayload = {
+    phone_display: cleanText(
+      payload.phone_display ??
+        currentSettings.phone_display,
+      80
+    ),
+    phone_link: cleanText(
+      payload.phone_link ??
+        currentSettings.phone_link,
+      40
+    ),
+    whatsapp_link: cleanText(
+      payload.whatsapp_link ??
+        currentSettings.whatsapp_link,
+      40
+    ),
+    city: cleanText(
+      payload.city ??
+        currentSettings.city,
+      120
+    ),
+    instagram_url: cleanText(
+      payload.instagram_url ??
+        currentSettings.instagram_url,
+      500
+    ),
+    instagram_handle: cleanText(
+      payload.instagram_handle ??
+        currentSettings.instagram_handle,
+      120
+    ),
+    facebook_url: cleanText(
+      payload.facebook_url ??
+        currentSettings.facebook_url,
+      500
+    ),
+    footer_tagline: cleanText(
+      payload.footer_tagline ??
+        currentSettings.footer_tagline,
+      300
+    ),
+    footer_rights_text:
+      nextCopyrightText,
+    updated_at:
+      new Date().toISOString(),
+  };
+
+  const {
+    data: updatedSettings,
+    error: updateError,
+  } = await supabase
+    .from("site_settings")
+    .update(updatePayload)
+    .eq("id", 1)
+    .select("*")
+    .single();
+
+  if (
+    updateError ||
+    !updatedSettings
+  ) {
+    console.error(
+      "Could not update site settings:",
+      updateError
+    );
+
+    return jsonResponse(500, {
+      error:
+        updateError?.message ||
+        "Could not save the website settings.",
+    });
+  }
+
+  return jsonResponse(200, {
+    ok: true,
+    settings: updatedSettings,
+    copyrightEditable: isOwner,
+  });
+}
+
 async function handleInquiry(
   request: Request,
   env: Env
@@ -1129,6 +1313,16 @@ export default {
       "/api/admin/session"
     ) {
       return handleAdminSession(
+        request,
+        env
+      );
+    }
+
+    if (
+      url.pathname ===
+      "/api/admin/settings"
+    ) {
+      return handleAdminSettings(
         request,
         env
       );
