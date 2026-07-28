@@ -858,6 +858,9 @@ function Dashboard() {
               <SettingsPanel
                 settings={settings}
                 setSettings={setSettings}
+                isOwner={
+                  identity?.role === "owner"
+                }
               />
             )}
 
@@ -2028,11 +2031,13 @@ function PortfolioModal({
 function SettingsPanel({
   settings,
   setSettings,
+  isOwner,
 }: {
   settings: SiteSettings;
   setSettings: (
     settings: SiteSettings
   ) => void;
+  isOwner: boolean;
 }) {
   const [saving, setSaving] =
     useState(false);
@@ -2040,35 +2045,75 @@ function SettingsPanel({
   const [message, setMessage] =
     useState("");
 
+  const [messageType, setMessageType] =
+    useState<
+      "success" | "error" | ""
+    >("");
+
   const save = async (
     event: FormEvent
   ) => {
     event.preventDefault();
 
-    if (!supabase) {
-      return;
-    }
-
     setSaving(true);
     setMessage("");
+    setMessageType("");
 
-    const { error } =
-      await supabase
-        .from("site_settings")
-        .update({
-          ...settings,
-          updated_at:
-            new Date().toISOString(),
-        })
-        .eq("id", 1);
+    try {
+      const result =
+        await adminRequest<{
+          ok: boolean;
+          settings: SiteSettings;
+          copyrightEditable: boolean;
+        }>(
+          "/api/admin/settings",
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              phone_display:
+                settings.phone_display,
+              phone_link:
+                settings.phone_link,
+              whatsapp_link:
+                settings.whatsapp_link,
+              city: settings.city,
+              instagram_url:
+                settings.instagram_url,
+              instagram_handle:
+                settings.instagram_handle,
+              facebook_url:
+                settings.facebook_url,
+              footer_tagline:
+                settings.footer_tagline,
+              footer_rights_text:
+                settings.footer_rights_text,
+            }),
+          }
+        );
 
-    setSaving(false);
+      setSettings({
+        ...DEFAULT_SITE_SETTINGS,
+        ...result.settings,
+      } as SiteSettings);
 
-    setMessage(
-      error
-        ? error.message
-        : "Settings saved. Refresh the public website to see the changes."
-    );
+      setMessageType("success");
+
+      setMessage(
+        result.copyrightEditable
+          ? "Settings saved, including the copyright / rights text."
+          : "Settings saved. The copyright / rights text remained protected and unchanged."
+      );
+    } catch (saveError) {
+      setMessageType("error");
+
+      setMessage(
+        saveError instanceof Error
+          ? saveError.message
+          : "Could not save website settings."
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -2211,21 +2256,41 @@ function SettingsPanel({
         </SettingField>
 
         <div className="md:col-span-2">
-          <SettingField label="Copyright / rights text">
-            <input
-              className="ss-input"
-              value={
-                settings.footer_rights_text
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-bold uppercase tracking-wide text-[#f3ddc7]/55">
+              Copyright / rights text
+            </span>
+
+            {!isOwner && (
+              <span className="rounded-full border border-[#e8b64a]/30 bg-[#e8b64a]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-[#e8b64a]">
+                Owner Only
+              </span>
+            )}
+          </div>
+
+          <input
+            className={`ss-input ${
+              !isOwner
+                ? "cursor-not-allowed opacity-65"
+                : ""
+            }`}
+            value={
+              settings.footer_rights_text
+            }
+            readOnly={!isOwner}
+            aria-readonly={!isOwner}
+            onChange={(event) => {
+              if (!isOwner) {
+                return;
               }
-              onChange={(event) =>
-                setSettings({
-                  ...settings,
-                  footer_rights_text:
-                    event.target.value,
-                })
-              }
-            />
-          </SettingField>
+
+              setSettings({
+                ...settings,
+                footer_rights_text:
+                  event.target.value,
+              });
+            }}
+          />
 
           <p className="mt-2 text-xs text-[#f3ddc7]/45">
             The year is automatic. Example
@@ -2233,10 +2298,25 @@ function SettingsPanel({
             {new Date().getFullYear()}{" "}
             {settings.footer_rights_text}
           </p>
+
+          {!isOwner && (
+            <p className="mt-2 text-xs leading-5 text-[#e8b64a]/80">
+              Only the main owner can change
+              this text. Admin accounts may
+              view it but cannot edit or
+              overwrite it.
+            </p>
+          )}
         </div>
 
         {message && (
-          <p className="md:col-span-2 rounded-xl bg-white/10 p-3 text-sm">
+          <p
+            className={`md:col-span-2 rounded-xl p-3 text-sm ${
+              messageType === "error"
+                ? "bg-red-950/35 text-red-100"
+                : "bg-emerald-950/25 text-emerald-100"
+            }`}
+          >
             {message}
           </p>
         )}
