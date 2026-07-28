@@ -1,6 +1,3 @@
-.ts
-
-
 import {
   createClient,
   type SupabaseClient,
